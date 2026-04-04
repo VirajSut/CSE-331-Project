@@ -1,4 +1,4 @@
-rom Traversals import bfs_path
+from Traversals import bfs_path
 import heapq
 from collections import deque
 from Simulator import Simulator
