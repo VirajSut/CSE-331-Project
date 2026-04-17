@@ -70,6 +70,13 @@ class Solution:
         # Step 1: Sort clients — high payers first, but deprioritize rural
         # since their infinite alpha means they never trigger pen0
         # ----------------------------------------------------------------
+        nonrural = [c for c in clients if c not in rural]
+        rural_clients = [c for c in clients if c in rural]
+        
+        non_rural_ranked = sorted(nonrural, key=lambda c: payments[c], reverse=True )
+        rural_ranked = sorted(rural_clients, 
+                              key= lambda c: payments[c],
+                              reverse=True)
         ranked = sorted(clients,
                         key=lambda c: (payments[c] if c not in rural else payments[c] * 0.5),
                         reverse=True)
