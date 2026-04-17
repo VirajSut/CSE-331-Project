@@ -73,7 +73,9 @@ class Solution:
         nonrural = [c for c in clients if c not in rural]
         rural_clients = [c for c in clients if c in rural]
         
-        non_rural_ranked = sorted(nonrural, key=lambda c: payments[c], reverse=True )
+        non_rural_ranked = sorted(nonrural, 
+                                  key=lambda c: payments[c], 
+                                  reverse=True )
         rural_ranked = sorted(rural_clients, 
                               key= lambda c: payments[c],
                               reverse=True)
@@ -125,6 +127,7 @@ class Solution:
         for c in clients:
             if c in rural:
                 # rural clients won't leave — lower base priority, scaled by payment
+                slack_beta = bw.get(c,0) / max((dist.get(c,1) / betas[c]), 1e-9)
                 priorities[c] = payments[c] / (betas[c] + 1)
             else:
                 # non-rural: weight by payment and how close they are to threshold
@@ -148,7 +151,8 @@ class Solution:
                     if n != self.isp: usage[n] += 1
 
             upgrade_cost = 0
-            to_fix = sorted(set(law_comps + fcc_comps), key=lambda c: payments[c], reverse=True)
+            nonrural_comps = [c for c in law_comps + fcc_comps if c not in rural]
+            to_fix = sorted(set(nonrural_comps), key=lambda c: payments[c], reverse=True)
 
             for c in to_fix:
                 bottleneck = min(
