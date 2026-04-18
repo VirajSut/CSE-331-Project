@@ -47,9 +47,9 @@ class Solution:
             use = defaultdict(int)
             for c in clients:
                 for n in paths[c]:
-                    if n == self.isp: use[n] += 1
+                    if n != self.isp: use[n] += 1
             return {c: min((bw.get (n, float('inf')) / use[n]
-                            for n in paths[c] if n == self.isp), default=float('inf'))
+                            for n in paths[c] if n != self.isp), default=float('inf'))
                     for c in clients}, use
 
         # clients who get less bandwidth than their complaint threshold
