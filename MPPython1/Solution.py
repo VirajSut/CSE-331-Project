@@ -129,6 +129,8 @@ class Solution:
                     share = caps[n] / max(usage[n], 1)
                     if share < required:
                         caps[n] = required * usage[n]
+                        
+                        #checking 
 
         # ---------- priorities ----------
         priorities = {
