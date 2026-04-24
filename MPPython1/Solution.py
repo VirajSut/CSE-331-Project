@@ -130,12 +130,14 @@ class Solution:
                     if share < required:
                         caps[n] = required * usage[n]
                         
-                        #checking 
 
         # ---------- priorities ----------
-        priorities = {
-            c: pay[c] * (dist.get(c, 1) / alpha[c]) / max(bw.get(c, 1e-9), 1e-9)
-            for c in C
-        }
+        
+        bw, usage, slow_clients = allocate(paths)
+        priorities ={}
+        for c in C:
+            required= dist.get(c,1)/ alpha[c] 
+            needed = bw.get(c, 1e-9) / max(required, 1e-9)
+            priorities[c] = pay[c] / max(needed, 1e-9)
 
         return paths, caps, priorities
