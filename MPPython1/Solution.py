@@ -1,5 +1,6 @@
 from Traversals import bfs_path
-from collections import defaultdict
+import heapq
+from collections import deque, defaultdict
 
 class Solution:
 
@@ -12,72 +13,72 @@ class Solution:
     def output_paths(self):
         paths, bandwidths, priorities = {}, {}, {}
 
-        clients  = self.info["list_clients"]
-        orig_bw  = self.info["bandwidths"]
-        alphas   = self.info["alphas"]
-        betas    = self.info["betas"]
-        pays     = self.info["payments"]
-        rural    = set(self.info.get("is_rural", {}).keys())
-        subset   = self.info["s"]
-        rho_l    = self.info["rho_lawsuit"]
-        rho_f    = self.info["rho_fcc"]
-        A, B, Z  = self.info["A"], self.info["B"], self.info["Z"]
+        clients = self.info["list_clients"]
+        orig_bw = self.info["bandwidths"]
+        alphas  = self.info["alphas"]
+        pays    = self.info["payments"]
+        Z       = self.info.get("Z", 0)
 
-        # find shortest path from ISP to each client
-        paths = dict(bfs_path(self.graph, self.isp, clients))
+        dist, q = {self.isp: 0}, deque([self.isp])
+        while q:
+            u = q.popleft()
+            for v in self.graph.get(u, []):
+                if v not in dist: dist[v] = dist[u] + 1; q.append(v)
 
-        # rural clients use beta since their alpha is infinite
-        priorities = {c: pays[c] / (betas[c] if c in rural else alphas[c]) for c in clients}
+        def widest(target, caps):
+            heap, seen = [(-float('inf'), self.isp, [self.isp])], set()
+            while heap:
+                neg, u, path = heapq.heappop(heap)
+                if u in seen: continue
+                seen.add(u)
+                if u == target: return path
+                for v in self.graph.get(u, []):
+                    if v not in seen:
+                        heapq.heappush(heap, (-min(-neg, caps.get(v, float('inf'))), v, path + [v]))
 
-        # count how many clients pass through each node
-        load = defaultdict(int)
-        for c in clients:
-            for u in paths[c][:-1]:
-                load[u] += 1
-
-        # bump up any node whose bandwidth is below its load
-        skip = set(clients) | {self.isp}
-        bandwidths = dict(orig_bw)
-        for u, b in orig_bw.items():
-            if u not in skip and b != float("inf") and b < load.get(u, 0):
-                bandwidths[u] = load[u]
-
-        # compute effective bandwidth each client receives after sharing
-        def get_bandwidth(bw):
+        def alloc(caps):
             use = defaultdict(int)
-            for c in clients:
-                for n in paths[c]:
+            for p in paths.values():
+                for n in p:
                     if n != self.isp: use[n] += 1
-            return {c: min((bw.get (n, float('inf')) / use[n]
-                            for n in paths[c] if n != self.isp), default=float('inf'))
-                    for c in clients}, use
+            return {c: min((caps.get(n, float('inf')) / use[n] for n in paths[c] if n != self.isp),
+                           default=float('inf')) for c in paths}, use
 
-        # clients who get less bandwidth than their complaint threshold
-        def get_complainers(bw, group):
-            return [c for c in group if bw.get(c, 0) < (len(paths[c]) - 1) / betas[c]]
+        def slow(bw): return [c for c in clients if bw.get(c, 0) < dist.get(c, float('inf')) / alphas[c]]
 
-        # penalty if enough clients complain
-        def get_penalty(bw):
-            law = len(get_complainers(bw, clients)) >= int(rho_l * len(clients))
-            fcc = len(get_complainers(bw, subset))  >= int(rho_f * len(subset))
-            return (A if law else 0) + (B if fcc else 0)
+        caps  = dict(orig_bw)
+        paths = {c: p for c in sorted(clients, key=lambda c: pays[c], reverse=True) if (p := widest(c, caps))}
 
-        # try upgrading bandwidths if it saves more than it costs
-        bw, use = get_bandwidth(bandwidths)
-        if get_penalty(bw) > 0:
-            new_bw, cost = dict(bandwidths), 0
-            complainers  = set(get_complainers(bw, clients) + get_complainers(bw, subset))
-            for c in sorted(complainers, key=lambda c: pays[c], reverse=True):
-                bot = min((n for n in paths[c] if n != self.isp),
-                          key=lambda n: new_bw.get(n, float('inf')) / max(use[n], 1), default=None)
-                if not bot: continue
-                needed = (len(paths[c]) - 1) / betas[c] * use[bot]
-                if needed > new_bw.get(bot, float('inf')):
-                    cost += needed - new_bw[bot]
-                    new_bw[bot] = needed
-            bw, _ = get_bandwidth(new_bw)
-            if get_penalty(bw) < get_penalty(dict(bandwidths)) - cost * Z:
-                bandwidths = new_bw
+        for _ in range(5):
+            bw, use = alloc(caps)
+            if not slow(bw): break
+            for c in slow(bw):
+                for node in sorted(paths[c][1:-1], key=lambda n: sum(n in p for p in paths.values()), reverse=True):
+                    prev, q = {self.isp: None}, deque([self.isp])
+                    while q:
+                        u = q.popleft()
+                        for v in self.graph.get(u, []):
+                            if v == node or v in prev: continue
+                            prev[v] = u
+                            if v == c:
+                                path, cur = [], u
+                                while cur: path.append(cur); cur = prev[cur]
+                                paths[c] = list(reversed(path)) + [c]; q.clear(); break
+                        else: continue
+                        break
+                    else: continue
+                    break
+
+        # one unsatisfied client wipes all revenue — always upgrade
+        bw, use = alloc(caps)
+        for c in sorted(slow(bw), key=lambda c: pays[c], reverse=True):
+            bot = min((n for n in paths[c] if n != self.isp), key=lambda n: caps.get(n, float('inf')) / max(use[n], 1), default=None)
+            if bot and (needed := dist.get(c, float('inf')) / alphas[c] * use[bot]) > caps.get(bot, float('inf')):
+                caps[bot] = needed
+
+        bw, _      = alloc(caps)
+        priorities = {c: pays[c] / max(bw.get(c, 1e-9) / max(dist.get(c, 1) / alphas[c], 1e-9), 1e-9) for c in clients}
+        bandwidths = {n: caps.get(n, orig_bw.get(n, 0)) for n in orig_bw}
 
         # WARNING: DO NOT MODIFY THE LINE BELOW, OR BAD THINGS WILL HAPPEN
         return (paths, bandwidths, priorities)
