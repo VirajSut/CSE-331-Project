@@ -25,22 +25,33 @@ class Solution:
 
         # ---------- widest path ----------
         def widest(target):
-            heap = [(-float('inf'), self.isp, [self.isp])]
+            if target not in dist:
+                return None 
+            
+            best = {self.isp: float('inf')}
+            parent = {self.isp: None}
+            heap = [(-float('inf'), self.isp)]
             seen = set()
 
             while heap:
-                neg_bw, u, path = heapq.heappop(heap)
+                neg_bw, u = heapq.heappop(heap)
                 if u in seen:
                     continue
                 seen.add(u)
 
                 if u == target:
-                    return path
-
+                    path,cur = [], target
+                    while cur is not None:
+                        path.append(cur)
+                        cur = parent[cur]
+                    return list(reversed(path))
                 for v in self.graph.get(u, []):
                     if v not in seen:
                         bw = min(-neg_bw, caps.get(v, float('inf')))
-                        heapq.heappush(heap, (-bw, v, path + [v]))
+                        if bw > best.get(v,-1):
+                            best[v] = bw
+                            parent[v] =u
+                            heapq.heappush(heap, (-bw, v))
 
         # ---------- allocate bandwidth + detect slow ----------
         def allocate(paths):
@@ -67,7 +78,11 @@ class Solution:
             return bw, usage, slow
 
         # ---------- initial paths ----------
-        paths = {c: widest(c) for c in C if widest(c)}
+        paths = {}
+        for c in C: 
+            p = widest(c)
+            if p:
+                paths[c] = p 
 
         # ---------- main loop (guarantee all satisfied) ----------
         while True:
@@ -119,16 +134,20 @@ class Solution:
                 continue
 
             # --- upgrade bottlenecks ---
+            better = False
             for c in slow_clients:
                 required = dist.get(c, float('inf')) / alpha[c]
 
                 for n in paths[c]:
                     if n == self.isp:
                         continue
-
+                
                     share = caps[n] / max(usage[n], 1)
                     if share < required:
                         caps[n] = required * usage[n]
+                        better = True
+            if better == False:
+                break 
                         
 
 
